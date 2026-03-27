@@ -1,4 +1,4 @@
-package com.pao.laboratory03.exceptions;
+package com.pao.laboratory04.exceptions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,7 +10,6 @@ import java.util.List;
  */
 public class ExampleExceptions {
 
-    // --- Excepție custom (în exercițiu creezi fișiere separate) ---
     private static class InsufficientFundsException extends RuntimeException {
         private final double balance;
         private final double amount;
@@ -31,7 +30,6 @@ public class ExampleExceptions {
         }
     }
 
-    // --- Metodă care aruncă excepție ---
     private static double withdraw(double balance, double amount) {
         if (amount < 0) {
             throw new NegativeAmountException(amount);
@@ -44,27 +42,24 @@ public class ExampleExceptions {
 
     public static void main(String[] args) {
 
-        // === 1. try-catch simplu ===
         System.out.println("=== 1. try-catch simplu ===");
         try {
             int[] arr = {1, 2, 3};
-            System.out.println(arr[10]);  // ArrayIndexOutOfBoundsException
+            System.out.println(arr[10]);
         } catch (ArrayIndexOutOfBoundsException e) {
             System.out.println("Prins: " + e.getMessage());
         }
 
-        // === 2. try-catch-finally ===
         System.out.println("\n=== 2. try-catch-finally ===");
         try {
             String text = null;
-            text.toUpperCase();  // NullPointerException
+            text.toUpperCase();
         } catch (NullPointerException e) {
             System.out.println("Prins: " + e.getMessage());
         } finally {
             System.out.println("Finally — se execută MEREU, chiar și cu return!");
         }
 
-        // === 3. Excepții custom ===
         System.out.println("\n=== 3. Excepții custom ===");
         try {
             double result = withdraw(100.0, 250.0);
@@ -75,7 +70,6 @@ public class ExampleExceptions {
             System.out.println("  Sumă cerută: " + e.getAmount());
         }
 
-        // === 4. Multi-catch (prinde mai multe tipuri într-un singur catch) ===
         System.out.println("\n=== 4. Multi-catch ===");
         try {
             withdraw(500, -20);
@@ -83,33 +77,28 @@ public class ExampleExceptions {
             System.out.println("Eroare tranzacție: " + e.getMessage());
         }
 
-        // === 5. Catch ordering: specific → general ===
         System.out.println("\n=== 5. Catch ordering ===");
         try {
             withdraw(50, 100);
         } catch (InsufficientFundsException e) {
-            // Specific — intră aici primul dacă e InsufficientFundsException
             System.out.println("Specific: " + e.getMessage());
         } catch (RuntimeException e) {
-            // General — prinde ORICE RuntimeException care nu a fost deja prinsă
             System.out.println("General: " + e.getMessage());
         }
 
-        // === 6. Prindere și re-aruncare ===
         System.out.println("\n=== 6. Prindere și re-aruncare ===");
         try {
             try {
                 withdraw(10, 100);
             } catch (InsufficientFundsException e) {
                 System.out.println("Logare eroare: " + e.getMessage());
-                throw e;  // re-aruncă mai departe
+                throw e;
             }
         } catch (RuntimeException e) {
             System.out.println("Prinsă la nivel superior: " + e.getClass().getSimpleName());
         }
 
-        // === 7. Excepții în colecții ===
-        System.out.println("\n=== 7. Validare cu excepții în colecții ===");
+        System.out.println("\n=== 7. Excepții în colecții ===");
         List<String> emails = new ArrayList<>();
         String[] input = {"ana@mail.com", "invalid-email", "dan@mail.com", "ana@mail.com"};
 
@@ -130,4 +119,3 @@ public class ExampleExceptions {
         System.out.println("Emails valide: " + emails);
     }
 }
-

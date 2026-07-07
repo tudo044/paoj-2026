@@ -2,7 +2,9 @@ package com.pao.proiect.magazin;
 
 import com.pao.proiect.magazin.exception.*;
 import com.pao.proiect.magazin.model.*;
+import com.pao.proiect.magazin.repository.*;
 import com.pao.proiect.magazin.service.*;
+import com.pao.proiect.magazin.util.DatabaseConnection;
 
 import java.util.*;
 
@@ -10,14 +12,23 @@ public class Main {
 
     static ProdusService produsService = ProdusService.getInstance();
     static DistribuitorService distribuitorService = DistribuitorService.getInstance();
+    static AuditService auditService = AuditService.getInstance();
+
+    static CategorieRepository categorieRepository = new CategorieRepository();
+    static DistribuitorRepository distribuitorRepository = new DistribuitorRepository();
+    static ProdusRepository produsRepository = new ProdusRepository();
+    static ComandaRepository comandaRepository = new ComandaRepository();
+
     static Scanner scanner = new Scanner(System.in);
     static int nextProdusId = 1;
     static int nextDistribuitorId = 1;
-    static Map<Integer, Categorie> categorii = new LinkedHashMap<>();
     static int nextCategorieId = 1;
+    static int nextComandaDbId = 1;
+    static Map<Integer, Categorie> categorii = new LinkedHashMap<>();
 
     public static void main(String[] args) {
         initDateInitiale();
+        initBazaDeDate();
 
         boolean running = true;
         while (running) {
@@ -37,6 +48,10 @@ public class Main {
                 case "8" -> actiunea8_topProduse();
                 case "9" -> actiunea9_cautaDistribuitor();
                 case "10" -> actiunea10_genereazaAlerte();
+                case "11" -> actiunea11_persistaDate();
+                case "12" -> actiunea12_plaseazaComandaJDBC();
+                case "13" -> actiunea13_comenziCuDistribuitorJOIN();
+                case "14" -> actiunea14_produseSiTopJOIN();
                 case "0" -> {
                     System.out.println("La revedere!");
                     running = false;
@@ -57,7 +72,7 @@ public class Main {
         System.out.println("╠══════════════════════════════════════════╣");
         System.out.println("║  1.  Adauga produs nou                   ║");
         System.out.println("║  2.  Actualizeaza stoc produs            ║");
-        System.out.println("║  3.  Plaseaza comanda catre distribuitor ║");
+        System.out.println("║  3.  Plaseaza comanda (in memorie)       ║");
         System.out.println("║  4.  Cauta produse dupa categorie        ║");
         System.out.println("║  5.  Produse cu stoc sub minim           ║");
         System.out.println("║  6.  Istoric comenzi distribuitor        ║");
@@ -65,11 +80,17 @@ public class Main {
         System.out.println("║  8.  Top produse dupa valoare stoc       ║");
         System.out.println("║  9.  Cauta distribuitor dupa nume        ║");
         System.out.println("║  10. Genereaza alerte stoc critic        ║");
+        System.out.println("╠══════════════ JDBC (Etapa II) ═══════════╣");
+        System.out.println("║  11. Repersista datele curente in BD     ║");
+        System.out.println("║  12. Plaseaza comanda (tranzactie JDBC)  ║");
+        System.out.println("║  13. Comenzi cu distribuitor (JOIN)      ║");
+        System.out.println("║  14. Produse + Top vandute (JOIN)        ║");
         System.out.println("║  0.  Iesire                              ║");
         System.out.println("╚══════════════════════════════════════════╝");
     }
 
     static void actiunea1_adaugaProdus() {
+        auditService.log("adauga_produs");
         System.out.println("=== ADAUGA PRODUS NOU ===");
         listeazaCategorii();
         System.out.print("ID categorie: ");
@@ -105,10 +126,16 @@ public class Main {
         }
 
         produsService.adauga(p);
+        try {
+            produsRepository.save(p);
+        } catch (RuntimeException e) {
+            System.out.println("Atentie: produsul nu a putut fi persistat in BD: " + e.getMessage());
+        }
         System.out.println("Produs adaugat cu codul: " + cod);
     }
 
     static void actiunea2_actualizeazaStoc() {
+        auditService.log("actualizeaza_stoc");
         System.out.println("=== ACTUALIZEAZA STOC ===");
         listeazaProduse();
         System.out.print("Cod produs: ");
@@ -117,14 +144,17 @@ public class Main {
         int cantitate = citestInt();
         try {
             produsService.actualizeazaStoc(cod, cantitate);
-            System.out.println("Stoc actualizat cu succes.");
+            Produs p = produsService.gasesteDupaCod(cod);
+            produsRepository.update(p);
+            System.out.println("Stoc actualizat cu succes (in memorie si in BD).");
         } catch (ProdusNegasitException e) {
             System.out.println("Eroare: " + e.getMessage());
         }
     }
 
     static void actiunea3_plaseazaComanda() {
-        System.out.println("=== PLASEAZA COMANDA ===");
+        auditService.log("plaseaza_comanda");
+        System.out.println("=== PLASEAZA COMANDA (IN MEMORIE) ===");
         listeazaDistribuitori();
         System.out.print("ID distribuitor: ");
         int distId = citestInt();
@@ -161,6 +191,7 @@ public class Main {
     }
 
     static void actiunea4_cautaDupaCategorie() {
+        auditService.log("cauta_dupa_categorie");
         System.out.println("=== CAUTA PRODUSE DUPA CATEGORIE ===");
         listeazaCategorii();
         System.out.print("Nume categorie: ");
@@ -175,6 +206,7 @@ public class Main {
     }
 
     static void actiunea5_produseSubStocMinim() {
+        auditService.log("produse_sub_stoc_minim");
         System.out.println("=== PRODUSE CU STOC SUB MINIM ===");
         List<Produs> lista = produsService.produseSubStocMinim();
         if (lista.isEmpty()) {
@@ -186,6 +218,7 @@ public class Main {
     }
 
     static void actiunea6_istoricComenzi() {
+        auditService.log("istoric_comenzi");
         System.out.println("=== ISTORIC COMENZI DISTRIBUITOR ===");
         listeazaDistribuitori();
         System.out.print("ID distribuitor: ");
@@ -199,19 +232,22 @@ public class Main {
     }
 
     static void actiunea7_stergeProdus() {
+        auditService.log("sterge_produs");
         System.out.println("=== STERGE PRODUS ===");
         listeazaProduse();
         System.out.print("Cod produs de sters: ");
         String cod = scanner.nextLine().trim();
         try {
             produsService.sterge(cod);
-            System.out.println("Produs sters cu succes.");
+            produsRepository.delete(cod);
+            System.out.println("Produs sters cu succes (din memorie si din BD).");
         } catch (ProdusNegasitException e) {
             System.out.println("Eroare: " + e.getMessage());
         }
     }
 
     static void actiunea8_topProduse() {
+        auditService.log("top_produse");
         System.out.println("=== TOP PRODUSE DUPA VALOARE STOC ===");
         System.out.print("Cate produse (ex: 5): ");
         int n = citestInt();
@@ -224,6 +260,7 @@ public class Main {
     }
 
     static void actiunea9_cautaDistribuitor() {
+        auditService.log("cauta_distribuitor");
         System.out.println("=== CAUTA DISTRIBUITOR DUPA NUME ===");
         System.out.print("Nume distribuitor: ");
         String nume = scanner.nextLine().trim();
@@ -236,6 +273,7 @@ public class Main {
     }
 
     static void actiunea10_genereazaAlerte() {
+        auditService.log("genereaza_alerte");
         System.out.println("=== ALERTE STOC CRITIC ===");
         List<StocAlert> alerte = produsService.genereazaAlerte();
         if (alerte.isEmpty()) {
@@ -243,6 +281,66 @@ public class Main {
         } else {
             alerte.forEach(System.out::println);
         }
+    }
+
+    static void actiunea11_persistaDate() {
+        auditService.log("persista_date_bd");
+        initBazaDeDate();
+    }
+
+    static void actiunea12_plaseazaComandaJDBC() {
+        auditService.log("plaseaza_comanda_jdbc");
+        System.out.println("=== PLASEAZA COMANDA (BD, TRANZACTIE JDBC) ===");
+        listeazaDistribuitori();
+        System.out.print("ID distribuitor: ");
+        int distId = citestInt();
+        try {
+            Distribuitor dist = distribuitorService.gasesteDupaId(distId);
+            Comanda comanda = new Comanda(nextComandaDbId++, dist);
+            while (true) {
+                listeazaProduse();
+                System.out.print("Cod produs (sau 'gata'): ");
+                String cod = scanner.nextLine().trim();
+                if (cod.equalsIgnoreCase("gata")) break;
+                try {
+                    Produs p = produsService.gasesteDupaCod(cod);
+                    System.out.print("Cantitate: ");
+                    int cant = citestInt();
+                    comanda.adaugaProdus(p, cant);
+                } catch (ProdusNegasitException e) {
+                    System.out.println("Eroare: " + e.getMessage());
+                }
+            }
+            if (comanda.getDetalii().isEmpty()) {
+                System.out.println("Comanda goala, nu a fost plasata.");
+                return;
+            }
+            comandaRepository.plaseazaComandaTranzactional(comanda);
+            System.out.println("Comanda persistata cu succes in BD (commit efectuat).");
+            System.out.println(comanda);
+        } catch (DistribuitorNegasitException e) {
+            System.out.println("Eroare: " + e.getMessage());
+        } catch (StocInsuficientException e) {
+            System.out.println("Tranzactie anulata (rollback): " + e.getMessage());
+        }
+    }
+
+    static void actiunea13_comenziCuDistribuitorJOIN() {
+        auditService.log("comenzi_cu_distribuitor_join");
+        System.out.println("=== COMENZI CU DISTRIBUITOR (JOIN) ===");
+        List<String> rezultate = comandaRepository.getComenziCuDistribuitor();
+        if (rezultate.isEmpty()) System.out.println("Nicio comanda in baza de date. Foloseste optiunea 12 mai intai.");
+        else rezultate.forEach(System.out::println);
+    }
+
+    static void actiunea14_produseSiTopJOIN() {
+        auditService.log("produse_si_top_vandute_join");
+        System.out.println("=== PRODUSE CU DISTRIBUITOR (JOIN) ===");
+        produsRepository.getProduseCuNumeDistribuitor().forEach(System.out::println);
+        System.out.println("\n=== TOP 5 PRODUSE VANDUTE, CU CATEGORIE (JOIN) ===");
+        List<String> top = produsRepository.getTopProduseVandute(5);
+        if (top.isEmpty()) System.out.println("Nicio vanzare inregistrata inca (plaseaza o comanda cu optiunea 12).");
+        else top.forEach(System.out::println);
     }
 
     static void listeazaProduse() {
@@ -311,5 +409,17 @@ public class Main {
         produsService.adauga(lapte);
 
         System.out.println("Date initiale incarcate: 4 produse, 2 distribuitori, 2 categorii.\n");
+    }
+
+    static void initBazaDeDate() {
+        try {
+            DatabaseConnection.getInstance().executeScript("schema.sql");
+            for (Categorie c : categorii.values()) categorieRepository.save(c);
+            for (Distribuitor d : distribuitorService.listeazaToti()) distribuitorRepository.save(d);
+            for (Produs p : produsService.listeazaToare()) produsRepository.save(p);
+            System.out.println("Baza de date initializata si populata cu datele curente.\n");
+        } catch (RuntimeException e) {
+            System.out.println("Atentie: nu s-a putut initializa baza de date: " + e.getMessage());
+        }
     }
 }
